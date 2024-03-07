@@ -1,4 +1,6 @@
+#include "vulkan/vulkan_core.h"
 #include <chrono>
+#include <cstdint>
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
@@ -93,9 +95,17 @@ struct Vertex {
 };
 
 const std::vector<Vertex> vertices = {
-    {{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}}, 
-    {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}}, 
+    {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}}, 
+    {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}}, 
     {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}, 
+    
+    {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}, 
+    {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}}, 
+    {{0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}, 
+};
+
+const std::vector<uint16_t> indices = {
+    0, 1, 2, 3, 4, 5, 
 };
 
 class HelloTriangleApplication {
@@ -140,8 +150,41 @@ private:
         createFramebuffers();
         createCommandPool();
         createVertexBuffer();
+        createIndexBuffer();
         createCommandBuffer();
         createSyncObjects();
+    }
+
+    void createIndexBuffer() {
+        VkDeviceSize size = sizeof(indices[0]) * indices.size();
+
+        VkBuffer stagingBuffer;
+        VkDeviceMemory stagingBufferMemory;
+        createBuffer(
+            size, 
+            VK_BUFFER_USAGE_TRANSFER_SRC_BIT, 
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, 
+            stagingBuffer, 
+            stagingBufferMemory
+        );
+
+        void* data;
+        vkMapMemory(device, stagingBufferMemory, 0, size, 0, &data);
+        memcpy(data, indices.data(), size);
+        vkUnmapMemory(device, stagingBufferMemory);
+
+        createBuffer(
+            size, 
+            VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, 
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 
+            indexBuffer, 
+            indexBufferMemory
+        );
+
+        copyBuffer(stagingBuffer, indexBuffer, size);
+
+        vkDestroyBuffer(device, stagingBuffer, nullptr);
+        vkFreeMemory(device, stagingBufferMemory, nullptr);
     }
 
     void copyBuffer(VkBuffer src, VkBuffer dst, VkDeviceSize size) {
@@ -172,8 +215,8 @@ private:
         submitInfo.commandBufferCount = 1;
         submitInfo.pCommandBuffers = &commandBuffer;
 
-        vkQueueSubmit(graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
-        vkQueueWaitIdle(graphicsQueue);
+        vkQueueSubmit(transferQueue, 1, &submitInfo, VK_NULL_HANDLE);
+        vkQueueWaitIdle(transferQueue);
 
         vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
     }
@@ -281,27 +324,31 @@ private:
 
         vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
+            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
 
-        VkBuffer vertexBuffers[] = {vertexBuffer};
-        VkDeviceSize offsets[] = {0};
-        vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
+            VkBuffer vertexBuffers[] = {vertexBuffer};
+            VkDeviceSize offsets[] = {0};
+            vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
 
-        VkViewport viewport{};
-        viewport.x = 0.0f;
-        viewport.y = 0.0f;
-        viewport.width = static_cast<float>(swapChainExtent.width);
-        viewport.height = static_cast<float>(swapChainExtent.height);
-        viewport.minDepth = 0.0f;
-        viewport.maxDepth = 1.0f;
-        vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+            VkBuffer indexBuffers[] = {indexBuffer};
+            vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT16);
 
-        VkRect2D scissor{};
-        scissor.offset = {0, 0};
-        scissor.extent = swapChainExtent;
-        vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+            VkViewport viewport{};
+            viewport.x = 0.0f;
+            viewport.y = 0.0f;
+            viewport.width = static_cast<float>(swapChainExtent.width);
+            viewport.height = static_cast<float>(swapChainExtent.height);
+            viewport.minDepth = 0.0f;
+            viewport.maxDepth = 1.0f;
+            vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
 
-        vkCmdDraw(commandBuffer, static_cast<uint32_t>(vertices.size()), 1, 0, 0);
+            VkRect2D scissor{};
+            scissor.offset = {0, 0};
+            scissor.extent = swapChainExtent;
+            vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+
+            // vkCmdDraw(commandBuffer, vertices.size(), 1, 0, 0);
+            vkCmdDrawIndexed(commandBuffer, indices.size(), 1, 0, 0, 0);
 
         vkCmdEndRenderPass(commandBuffer);
 
@@ -692,7 +739,7 @@ private:
 
         vkGetDeviceQueue(device, indice.graphicsFamily.value(), 0, &graphicsQueue);
         vkGetDeviceQueue(device, indice.presentFamily.value(), 0, &presenetQueue);
-        // vkGetDeviceQueue(device, indice.transferFamily.value(), 0, &transferQueue);
+        vkGetDeviceQueue(device, indice.transferFamily.value(), 0, &transferQueue);
     }
 
     void pickPhysicalDevice() {
@@ -841,6 +888,9 @@ private:
 
         vkDestroyBuffer(device, vertexBuffer, nullptr);
         vkFreeMemory(device, vertexBufferMemory, nullptr);
+
+        vkDestroyBuffer(device, indexBuffer, nullptr);
+        vkFreeMemory(device, indexBufferMemory, nullptr);
 
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
             vkDestroySemaphore(device, imageAvailableSemaphores[i], nullptr);
@@ -1165,6 +1215,8 @@ private:
 
     VkBuffer vertexBuffer;
     VkDeviceMemory vertexBufferMemory;
+    VkBuffer indexBuffer;
+    VkDeviceMemory indexBufferMemory;
 
     bool framebufferResized = false;
 };
