@@ -1,3 +1,5 @@
 add_executable(Vulkan main.cpp)
+add_executable(Test test.cpp)
 
 target_link_libraries(Vulkan vulkan-1.lib glfw3dll.lib)
+target_link_libraries(Test vulkan-1.lib glfw3dll.lib)
