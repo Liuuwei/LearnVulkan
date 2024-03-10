@@ -7,11 +7,11 @@ set(CMAKE_MAKE_PROGRAM "Unix Makefiles")
 set(CMAKE_CXX_STANDARD 17)
 
 include_directories(include)
-include_directories("C:/Users/Liuwei/git/vcpkg/installed/x64-windows/include")
-include_directories("C:/VulkanSDK/1.3.275.0/Include")
+include_directories($ENV{VCPKG_INCLUDE})
+include_directories($ENV{VULKAN_SDK}/Include)
 
-link_directories("C:/Users/Liuwei/git/vcpkg/installed/x64-windows/lib")
-link_directories("C:/VulkanSDK/1.3.275.0/Lib")
+link_directories($ENV{VCPKG_LIB})
+link_directories($ENV{VULKAN_SDK}/Lib)
 
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)
 
